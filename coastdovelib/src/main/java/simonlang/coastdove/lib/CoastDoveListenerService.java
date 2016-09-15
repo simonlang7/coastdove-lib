@@ -108,7 +108,14 @@ public abstract class CoastDoveListenerService extends Service {
         this.lastNotification = "";
         this.screenOff = false;
 
+        onServiceBound();
         return mMessenger.getBinder();
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        onServiceUnbound();
+        return super.onUnbind(intent);
     }
 
     /** Internal wrapper for onAppStarted */
@@ -153,6 +160,16 @@ public abstract class CoastDoveListenerService extends Service {
         onScreenStateDetected(screenOff);
     }
 
+
+    /**
+     * Called by the library when the service is bound, can be used for initialization
+     */
+    protected abstract void onServiceBound();
+
+    /**
+     * Called by the library when the service is unbound, can be used for cleaning up
+     */
+    protected abstract void onServiceUnbound();
 
     /**
      * Called by the library when any associated app is put in the foreground
