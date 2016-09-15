@@ -1,3 +1,21 @@
+/*  Coast Dove
+    Copyright (C) 2016  Simon Lang
+    Contact: simon.lang7 at gmail dot com
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package simonlang.coastdove.lib;
 
 import android.app.Service;
@@ -57,13 +75,15 @@ public abstract class CoastDoveListenerService extends Service {
             }
             if ((msg.what & MSG_INTERACTION_DETECTED) != 0) {
                 Parcelable[] interactionArray = data.getParcelableArray("interaction");
+                String eventTypeString = data.getString("eventType");
+                EventType eventType = EventType.valueOf(eventTypeString);
                 if (interactionArray == null)
                     Log.e("Listener", "Interaction data is null");
                 else {
                     Collection<InteractionEventData> interaction = new LinkedList<>();
                     for (Parcelable eventData : interactionArray)
                         interaction.add((InteractionEventData) eventData);
-                    interactionDetected(interaction);
+                    interactionDetected(interaction, eventType);
                 }
             }
             if ((msg.what & MSG_NOTIFICATION_DETECTED) != 0) {
@@ -143,9 +163,9 @@ public abstract class CoastDoveListenerService extends Service {
     }
 
     /** Internal wrapper for onInteractionDetected */
-    private void interactionDetected(Collection<InteractionEventData> interaction) {
+    private void interactionDetected(Collection<InteractionEventData> interaction, EventType eventType) {
         this.lastInteraction = new LinkedList<>(interaction);
-        onInteractionDetected(lastInteraction);
+        onInteractionDetected(lastInteraction, eventType);
     }
 
     /** Internal wrapper for onNotificationDetected */
@@ -200,8 +220,9 @@ public abstract class CoastDoveListenerService extends Service {
     /**
      * Called by the library whenever a new interaction has been detected
      * @param interaction    Interaction detected
+     * @param eventType      Type of event
      */
-    protected abstract void onInteractionDetected(Collection<InteractionEventData> interaction);
+    protected abstract void onInteractionDetected(Collection<InteractionEventData> interaction, EventType eventType);
 
     /**
      * Called by the library whenever a new notification has been detected
@@ -246,4 +267,5 @@ public abstract class CoastDoveListenerService extends Service {
     public final boolean isScreenOff() {
         return screenOff;
     }
+
 }
