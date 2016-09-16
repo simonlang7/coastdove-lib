@@ -39,13 +39,22 @@ import java.util.TreeSet;
  * Listener service to be bound by the Coast Dove core app
  */
 public abstract class CoastDoveListenerService extends Service {
-    public static final int MSG_APP_STARTED = 1;
-    public static final int MSG_APP_CLOSED = 2;
-    public static final int MSG_ACTIVITY_DETECTED = 4;
-    public static final int MSG_LAYOUTS_DETECTED = 8;
-    public static final int MSG_INTERACTION_DETECTED = 16;
-    public static final int MSG_NOTIFICATION_DETECTED = 32;
-    public static final int MSG_SCREEN_STATE_DETECTED = 64;
+    public static final int MSG_REPLY_TO = 1;
+    public static final int MSG_APP_STARTED = 2;
+    public static final int MSG_APP_CLOSED = 4;
+    public static final int MSG_ACTIVITY_DETECTED = 8;
+    public static final int MSG_LAYOUTS_DETECTED = 16;
+    public static final int MSG_INTERACTION_DETECTED = 32;
+    public static final int MSG_NOTIFICATION_DETECTED = 64;
+    public static final int MSG_SCREEN_STATE_DETECTED = 128;
+
+    public static final String DATA_APP_PACKAGE_NAME = "appPackageName";
+    public static final String DATA_ACTIVITY = "activity";
+    public static final String DATA_LAYOUTS = "layouts";
+    public static final String DATA_INTERACTION = "interaction";
+    public static final String DATA_EVENT_TYPE = "eventType";
+    public static final String DATA_NOTIFICATION = "notification";
+    public static final String DATA_SCREEN_OFF = "screenOff";
 
     /**
      * Handler for incoming messages from Coast Dove core
@@ -55,27 +64,30 @@ public abstract class CoastDoveListenerService extends Service {
         public void handleMessage(Message msg) {
             Bundle data = msg.getData();
             data.setClassLoader(CoastDoveListenerService.this.getClass().getClassLoader());
+            if ((msg.what & MSG_REPLY_TO) != 0) {
+                mReplyMessenger = msg.replyTo;
+            }
             if ((msg.what & MSG_APP_CLOSED) != 0) {
                 appClosed();
             }
             if ((msg.what & MSG_APP_STARTED) != 0) {
-                String appPackageName = data.getString("appPackageName");
+                String appPackageName = data.getString(DATA_APP_PACKAGE_NAME);
                 appStarted(appPackageName);
             }
             if ((msg.what & MSG_ACTIVITY_DETECTED) != 0) {
-                String activity = data.getString("activity");
+                String activity = data.getString(DATA_ACTIVITY);
                 activityDetected(activity);
             }
             if ((msg.what & MSG_LAYOUTS_DETECTED) != 0) {
-                String[] layoutsArray = data.getStringArray("layouts");
+                String[] layoutsArray = data.getStringArray(DATA_LAYOUTS);
                 TreeSet<String> layouts = new TreeSet<>(new CollatorWrapper());
                 for (String layout : layoutsArray)
                     layouts.add(layout);
                 layoutsDetected(layouts);
             }
             if ((msg.what & MSG_INTERACTION_DETECTED) != 0) {
-                Parcelable[] interactionArray = data.getParcelableArray("interaction");
-                String eventTypeString = data.getString("eventType");
+                Parcelable[] interactionArray = data.getParcelableArray(DATA_INTERACTION);
+                String eventTypeString = data.getString(DATA_EVENT_TYPE);
                 EventType eventType = EventType.valueOf(eventTypeString);
                 if (interactionArray == null)
                     Log.e("Listener", "Interaction data is null");
@@ -87,18 +99,21 @@ public abstract class CoastDoveListenerService extends Service {
                 }
             }
             if ((msg.what & MSG_NOTIFICATION_DETECTED) != 0) {
-                String notification = data.getString("notification");
+                String notification = data.getString(DATA_NOTIFICATION);
                 notificationDetected(notification);
             }
             if ((msg.what & MSG_SCREEN_STATE_DETECTED) != 0) {
-                boolean screenOff = data.getBoolean("screenOff");
+                boolean screenOff = data.getBoolean(DATA_SCREEN_OFF);
                 screenStateDetected(screenOff);
             }
         }
     }
 
-    /** Messenger to communicate with the Coast Dove core app */
+    /** Receives messages from the Coast Dove core app */
     private transient final Messenger mMessenger = new Messenger(new IncomingHandler());
+    /** Sends messages back to the Coast Dove core app */
+    private transient Messenger mReplyMessenger = null;
+
 
     /** Last package name detected, or "" if none so far */
     private transient volatile String lastAppPackageName;
@@ -134,6 +149,7 @@ public abstract class CoastDoveListenerService extends Service {
 
     @Override
     public boolean onUnbind(Intent intent) {
+        mReplyMessenger = null;
         onServiceUnbound();
         return super.onUnbind(intent);
     }
