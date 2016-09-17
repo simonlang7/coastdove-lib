@@ -26,10 +26,10 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.Parcelable;
+import android.os.RemoteException;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.Set;
@@ -39,16 +39,24 @@ import java.util.TreeSet;
  * Listener service to be bound by the Coast Dove core app
  */
 public abstract class CoastDoveListenerService extends Service {
+    // Sent from Coast Dove Core -> Coast Dove Listener
     public static final int MSG_REPLY_TO = 1;
-    public static final int MSG_APP_STARTED = 2;
-    public static final int MSG_APP_CLOSED = 4;
-    public static final int MSG_ACTIVITY_DETECTED = 8;
-    public static final int MSG_LAYOUTS_DETECTED = 16;
-    public static final int MSG_INTERACTION_DETECTED = 32;
-    public static final int MSG_NOTIFICATION_DETECTED = 64;
-    public static final int MSG_SCREEN_STATE_DETECTED = 128;
+    public static final int MSG_APP_ENABLED = 2;
+    public static final int MSG_APP_DISABLED = 4;
+    public static final int MSG_META_INFORMATION = 8;
+    public static final int MSG_APP_CLOSED = 16;
+    public static final int MSG_APP_OPENED = 32;
+    public static final int MSG_ACTIVITY_DETECTED = 64;
+    public static final int MSG_LAYOUTS_DETECTED = 128;
+    public static final int MSG_INTERACTION_DETECTED = 256;
+    public static final int MSG_NOTIFICATION_DETECTED = 512;
+    public static final int MSG_SCREEN_STATE_DETECTED = 1024;
+
+    // Sent from Coast Dove Listener -> Coast Dove Core
+    public static final int REPLY_REQUEST_META_INFORMATION = 1;
 
     public static final String DATA_APP_PACKAGE_NAME = "appPackageName";
+    public static final String DATA_META_INFORMATION = "appMetaInformation";
     public static final String DATA_ACTIVITY = "activity";
     public static final String DATA_LAYOUTS = "layouts";
     public static final String DATA_INTERACTION = "interaction";
@@ -67,12 +75,26 @@ public abstract class CoastDoveListenerService extends Service {
             if ((msg.what & MSG_REPLY_TO) != 0) {
                 mReplyMessenger = msg.replyTo;
             }
+            if ((msg.what & MSG_APP_ENABLED) != 0) {
+                String appPackageName = data.getString(DATA_APP_PACKAGE_NAME);
+                appEnabled(appPackageName);
+            }
+            if ((msg.what & MSG_APP_DISABLED) != 0) {
+                String appPackageName = data.getString(DATA_APP_PACKAGE_NAME);
+                appDisabled(appPackageName);
+            }
+            if ((msg.what & MSG_META_INFORMATION) != 0) {
+                String appPackageName = data.getString(DATA_APP_PACKAGE_NAME);
+                Parcelable appMetaInformation = data.getParcelable(DATA_META_INFORMATION);
+                if (appMetaInformation instanceof AppMetaInformation)
+                    onMetaInformationDelivered(appPackageName, (AppMetaInformation)appMetaInformation);
+            }
             if ((msg.what & MSG_APP_CLOSED) != 0) {
                 appClosed();
             }
-            if ((msg.what & MSG_APP_STARTED) != 0) {
+            if ((msg.what & MSG_APP_OPENED) != 0) {
                 String appPackageName = data.getString(DATA_APP_PACKAGE_NAME);
-                appStarted(appPackageName);
+                appOpened(appPackageName);
             }
             if ((msg.what & MSG_ACTIVITY_DETECTED) != 0) {
                 String activity = data.getString(DATA_ACTIVITY);
@@ -128,6 +150,8 @@ public abstract class CoastDoveListenerService extends Service {
     /** Whether the screen is currently off, according to the last
      *  screen state detected (false by default) */
     private transient volatile boolean screenOff;
+    /** Apps for which this module is enabled */
+    private transient volatile Set<String> enabledApps;
 
     /**
      * Binds the service and initializes all members to empty or default values (empty sets, "", false)
@@ -142,6 +166,7 @@ public abstract class CoastDoveListenerService extends Service {
         this.lastInteraction = new LinkedList<>();
         this.lastNotification = "";
         this.screenOff = false;
+        this.enabledApps = new TreeSet<>(new CollatorWrapper());
 
         onServiceBound();
         return mMessenger.getBinder();
@@ -150,14 +175,34 @@ public abstract class CoastDoveListenerService extends Service {
     @Override
     public boolean onUnbind(Intent intent) {
         mReplyMessenger = null;
+
+        // Since the core is already disconnected, it cannot send MSG_APP_DISABLED
+        // messages. We disable all apps here to make sure the user-implemented
+        // callback method is called.
+        Collection<String> enabledAppsCopy = new LinkedList<>(this.enabledApps);
+        for (String app : enabledAppsCopy)
+            appDisabled(app);
+
         onServiceUnbound();
         return super.onUnbind(intent);
     }
 
-    /** Internal wrapper for onAppStarted */
-    private void appStarted(String appPackageName) {
+    /** Internal wrapper for onAppEnabled */
+    private void appEnabled(String appPackageName) {
+        this.enabledApps.add(appPackageName);
+        onAppEnabled(appPackageName);
+    }
+
+    /** Internal wrapper for onAppDisabled */
+    private void appDisabled(String appPackageName) {
+        this.enabledApps.remove(appPackageName);
+        onAppDisabled(appPackageName);
+    }
+
+    /** Internal wrapper for onAppOpened */
+    private void appOpened(String appPackageName) {
         this.lastAppPackageName = appPackageName;
-        onAppStarted();
+        onAppOpened();
     }
 
     /** Internal wrapper for onAppClosed */
@@ -196,6 +241,24 @@ public abstract class CoastDoveListenerService extends Service {
         onScreenStateDetected(screenOff);
     }
 
+    /**
+     * Requests AppMetaInformation from Coast Dove core. Will be delivered using
+     * onMetaInformationDelivered
+     * @param appPackageName    App to request meta information for
+     */
+    protected final void requestMetaInformation(String appPackageName) {
+        Bundle data = new Bundle();
+        data.putString(DATA_APP_PACKAGE_NAME, appPackageName);
+        int type = REPLY_REQUEST_META_INFORMATION;
+
+        Message msg = Message.obtain(null, type, 0, 0);
+        msg.setData(data);
+        try {
+            mReplyMessenger.send(msg);
+        } catch (RemoteException e) {
+            Log.e("Listener", "Unable to send reply (requestMetaInformation): " + e.getMessage());
+        }
+    }
 
     /**
      * Called by the library when the service is bound, can be used for initialization
@@ -208,11 +271,31 @@ public abstract class CoastDoveListenerService extends Service {
     protected abstract void onServiceUnbound();
 
     /**
+     * Called by the library when the core enables an app for this module
+     * @param appPackageName    App enabled by the core
+     */
+    protected abstract void onAppEnabled(String appPackageName);
+
+    /**
+     * Called by the library when the core disables an app for this module
+     * @param appPackageName    App disabled by the core
+     */
+    protected abstract void onAppDisabled(String appPackageName);
+
+    /**
+     * Called by the library when AppMetaInformation is delivered. Request it by calling
+     * requestMetaInformation.
+     * @param appPackageName     App to which the meta information belongs
+     * @param metaInformation    Meta information delivered
+     */
+    protected abstract void onMetaInformationDelivered(String appPackageName, AppMetaInformation metaInformation);
+
+    /**
      * Called by the library when any associated app is put in the foreground
      * (i.e., when any activity of an associated app is shown when another app
      * was in foreground before)
      */
-    protected abstract void onAppStarted();
+    protected abstract void onAppOpened();
 
     /**
      * Called by the library when any associated app is put in the background
