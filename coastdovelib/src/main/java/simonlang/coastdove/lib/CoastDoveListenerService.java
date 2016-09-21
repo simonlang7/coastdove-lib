@@ -20,6 +20,7 @@ package simonlang.coastdove.lib;
 
 import android.app.Service;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -29,6 +30,7 @@ import android.os.Parcelable;
 import android.os.RemoteException;
 import android.support.annotation.Nullable;
 import android.util.Log;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.Collection;
 import java.util.LinkedList;
@@ -51,9 +53,14 @@ public abstract class CoastDoveListenerService extends Service {
     public static final int MSG_INTERACTION_DETECTED = 256;
     public static final int MSG_NOTIFICATION_DETECTED = 512;
     public static final int MSG_SCREEN_STATE_DETECTED = 1024;
+    public static final int MSG_VIEW_TREE_RECEIVED = 2048;
+    public static final int MSG_ACTION_SUCCESSFUL = 4096;
 
     // Sent from Coast Dove Listener -> Coast Dove Core
     public static final int REPLY_REQUEST_META_INFORMATION = 1;
+    public static final int REPLY_REQUEST_FULL_VIEW_TREE = 2;
+    public static final int REPLY_REQUEST_PARTIAL_VIEW_TREE = 4;
+    public static final int REPLY_REQUEST_ACTION = 8;
 
     public static final String DATA_APP_PACKAGE_NAME = "appPackageName";
     public static final String DATA_META_INFORMATION = "appMetaInformation";
@@ -63,6 +70,9 @@ public abstract class CoastDoveListenerService extends Service {
     public static final String DATA_EVENT_TYPE = "eventType";
     public static final String DATA_NOTIFICATION = "notification";
     public static final String DATA_SCREEN_OFF = "screenOff";
+    public static final String DATA_VIEW_TREE = "viewTree";
+    public static final String DATA_VIEW_TREE_ROOT_ID = "viewTreeRootID";
+    public static final String DATA_ACTION = "action";
 
     /**
      * Handler for incoming messages from Coast Dove core
@@ -128,6 +138,17 @@ public abstract class CoastDoveListenerService extends Service {
                 boolean screenOff = data.getBoolean(DATA_SCREEN_OFF);
                 screenStateDetected(screenOff);
             }
+            if ((msg.what & MSG_VIEW_TREE_RECEIVED) != 0) {
+                ViewTreeNode viewTree = data.getParcelable(DATA_VIEW_TREE);
+                viewTreeReceived(viewTree);
+            }
+            if ((msg.what & MSG_ACTION_SUCCESSFUL) != 0) {
+                if (Build.VERSION.SDK_INT >= 21) {
+                    int actionID = data.getInt(DATA_ACTION);
+                    AccessibilityNodeInfo.AccessibilityAction action = new AccessibilityNodeInfo.AccessibilityAction(actionID, null);
+                    actionSuccessful(action);
+                }
+            }
         }
     }
 
@@ -152,11 +173,13 @@ public abstract class CoastDoveListenerService extends Service {
     private transient volatile boolean screenOff;
     /** Apps for which this module is enabled */
     private transient volatile Set<String> enabledApps;
+    /** Last viewtree received, if ever requested using requestViewTree */
+    private transient volatile ViewTreeNode lastViewTree;
 
     /**
-     * Binds the service and initializes all members to empty or default values (empty sets, "", false)
-     * to make sure they don't need to be checked for null. Do not call this method, this is done by
-     * Android using bindService.
+     * Binds the service and initializes all members (except lastViewTree, which is set to null)
+     * to empty or default values (empty sets, "", false) to make sure they don't need to be checked
+     * for null. Do not call this method, this is done by Android using bindService.
      */
     @Nullable
     @Override
@@ -167,6 +190,7 @@ public abstract class CoastDoveListenerService extends Service {
         this.lastNotification = "";
         this.screenOff = false;
         this.enabledApps = new TreeSet<>(new CollatorWrapper());
+        this.lastViewTree = null;
 
         onServiceBound();
         return mMessenger.getBinder();
@@ -241,6 +265,17 @@ public abstract class CoastDoveListenerService extends Service {
         onScreenStateDetected(screenOff);
     }
 
+    /** Internal wrapper for onViewTreeReceived */
+    private void viewTreeReceived(ViewTreeNode viewTree) {
+        this.lastViewTree = viewTree;
+        onViewTreeReceived(viewTree);
+    }
+
+    /** Internal wrapper for onActionSuccessful */
+    private void actionSuccessful(AccessibilityNodeInfo.AccessibilityAction action) {
+        onActionSuccessful(action);
+    }
+
     /**
      * Requests AppMetaInformation from Coast Dove core. Will be delivered using
      * onMetaInformationDelivered
@@ -257,6 +292,56 @@ public abstract class CoastDoveListenerService extends Service {
             mReplyMessenger.send(msg);
         } catch (RemoteException e) {
             Log.e("Listener", "Unable to send reply (requestMetaInformation): " + e.getMessage());
+        }
+    }
+
+    /**
+     * Requests a view tree from Coast Dove core. This is a copy of the original
+     * AccessibilityNodeInfo tree.
+     * @param subTreeRootResource    If this is null, the full view tree will be requested.
+     *                               Otherwise, the core will look for a NodeInfo whose
+     *                               viewIdResourceName contains subTreeRootResource, and if
+     *                               found, delivers the subtree with that element as its root.
+     *                               If not found, nothing is delivered.
+     */
+    protected final void requestViewTree(String subTreeRootResource) {
+        Bundle data = new Bundle();
+        int type;
+        if (subTreeRootResource != null) {
+            data.putString(DATA_VIEW_TREE_ROOT_ID, subTreeRootResource);
+            type = REPLY_REQUEST_PARTIAL_VIEW_TREE;
+        }
+        else
+            type = REPLY_REQUEST_FULL_VIEW_TREE;
+
+        Message msg = Message.obtain(null, type, 0, 0);
+        msg.setData(data);
+        try {
+            mReplyMessenger.send(msg);
+        } catch (RemoteException e) {
+            Log.e("Listener", "Unable to send reply (requestViewTree): " + e.getMessage());
+        }
+    }
+
+    /**
+     * Requests the Coast Dove core to perform an action on a node (an element).
+     * This only works on SDK versions >= 21
+     * @param action    Action to perform
+     */
+    protected final void requestAction(AccessibilityNodeInfo.AccessibilityAction action) {
+        if (Build.VERSION.SDK_INT < 21)
+            return;
+
+        Bundle data = new Bundle();
+        data.putInt(DATA_ACTION, action.getId());
+        int type = REPLY_REQUEST_ACTION;
+
+        Message msg = Message.obtain(null, type, 0, 0);
+        msg.setData(data);
+        try {
+            mReplyMessenger.send(msg);
+        } catch (RemoteException e) {
+            Log.e("Listener", "Unable to send reply (requestAction): " + e.getMessage());
         }
     }
 
@@ -335,6 +420,20 @@ public abstract class CoastDoveListenerService extends Service {
      */
     protected abstract void onScreenStateDetected(boolean screenOff);
 
+    /**
+     * Called by the library when a view tree has been received. Use requestViewTree
+     * to request one.
+     * @param viewTree    ViewTree received
+     */
+    protected abstract void onViewTreeReceived(ViewTreeNode viewTree);
+
+    /**
+     * Called by the library when an action previously requested has been executed
+     * successfully. Use requestAction to request an action to be executed.
+     * @param action    Action executed successfully
+     */
+    protected abstract void onActionSuccessful(AccessibilityNodeInfo.AccessibilityAction action);
+
 
     /** Last package name detected, or "" if none so far */
     public final String getLastAppPackageName() {
@@ -365,6 +464,11 @@ public abstract class CoastDoveListenerService extends Service {
      *  screen state detected (false by default) */
     public final boolean isScreenOff() {
         return screenOff;
+    }
+
+    /** Last viewtree received, if ever requested using requestViewTree */
+    public final ViewTreeNode getLastViewTree() {
+        return lastViewTree;
     }
 
 }
