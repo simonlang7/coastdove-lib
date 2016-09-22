@@ -74,7 +74,7 @@ public abstract class CoastDoveModules {
      *                          String "*" as its only element.
      */
     public static void registerModule(Context context, Class<?> serviceClass, String moduleName,
-                                      String[] associatedApps) {
+                                      String... associatedApps) {
         ArrayList<String> associatedAppsArrayList = new ArrayList<>(associatedApps.length);
         for (String app : associatedApps)
             associatedAppsArrayList.add(app);

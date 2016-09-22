@@ -54,7 +54,7 @@ public abstract class CoastDoveListenerService extends Service {
     public static final int MSG_NOTIFICATION_DETECTED = 512;
     public static final int MSG_SCREEN_STATE_DETECTED = 1024;
     public static final int MSG_VIEW_TREE = 2048;
-    public static final int MSG_ACTION_SUCCESSFUL = 4096;
+    public static final int MSG_ACTION_RESULT = 4096;
 
     // Sent from Coast Dove Listener -> Coast Dove Core
     public static final int REPLY_REQUEST_META_INFORMATION = 1;
@@ -144,11 +144,17 @@ public abstract class CoastDoveListenerService extends Service {
                 ViewTreeNode viewTree = data.getParcelable(DATA_VIEW_TREE);
                 viewTreeReceived(viewTree);
             }
-            if ((msg.what & MSG_ACTION_SUCCESSFUL) != 0) {
+            if ((msg.what & MSG_ACTION_RESULT) != 0) {
                 if (Build.VERSION.SDK_INT >= 21) {
                     int actionID = data.getInt(DATA_ACTION);
+                    ViewTreeNode node = null;
+                    if (data.containsKey(DATA_VIEW_TREE_NODE))
+                        node = data.getParcelable(DATA_VIEW_TREE_NODE);
                     AccessibilityNodeInfo.AccessibilityAction action = new AccessibilityNodeInfo.AccessibilityAction(actionID, null);
-                    actionSuccessful(action);
+                    if (msg.arg1 != 0)
+                        actionSuccessful(node, action);
+                    else
+                        actionFailed(node, action);
                 }
             }
         }
@@ -274,8 +280,13 @@ public abstract class CoastDoveListenerService extends Service {
     }
 
     /** Internal wrapper for onActionSuccessful */
-    private void actionSuccessful(AccessibilityNodeInfo.AccessibilityAction action) {
-        onActionSuccessful(action);
+    private void actionSuccessful(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action) {
+        onActionSuccessful(node, action);
+    }
+
+    /** Internal wrapper for onActionFailed */
+    private void actionFailed(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action) {
+        onActionFailed(node, action);
     }
 
     /**
@@ -467,9 +478,18 @@ public abstract class CoastDoveListenerService extends Service {
     /**
      * Called by the library when an action previously requested has been executed
      * successfully. Use requestAction to request an action to be executed.
+     * @param node      (Flat) node on which the action was executed
      * @param action    Action executed successfully
      */
-    protected abstract void onActionSuccessful(AccessibilityNodeInfo.AccessibilityAction action);
+    protected abstract void onActionSuccessful(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action);
+
+    /**
+     * Called by the library when an action previously requested could not be
+     * executed.
+     * @param node      (Flat) node on which the action was supposed to be executed
+     * @param action    Action that failed
+     */
+    protected abstract void onActionFailed(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action);
 
 
     /** Last package name detected, or "" if none so far */
