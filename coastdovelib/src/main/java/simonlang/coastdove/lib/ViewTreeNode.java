@@ -1,118 +1,16 @@
 package simonlang.coastdove.lib;
 
-import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Stack;
 
 /**
  * Container for data from an AccessibilityNodeInfo object
  */
 public class ViewTreeNode implements Parcelable {
-    /**
-     * Creates a ViewTreeNode that represents an entire subtree of AccessibilityNodeInfos
-     * @param rootNodeInfo    AccessibilityNodeInfo to start from, i.e., the root of the subtree
-     * @return Copied representation of an AccessibilityNodeInfo subtree
-     */
-    public static ViewTreeNode fromAccessibilityNodeInfo(AccessibilityNodeInfo rootNodeInfo) {
-        Stack<AccessibilityNodeInfo> nodeInfos = new Stack<>();
-        nodeInfos.push(rootNodeInfo);
-        Stack<ViewTreeNode> viewTreeNodes = new Stack<>();
-
-        // Traverse tree with depth-first search
-        AccessibilityNodeInfo currentNodeInfo;
-        ViewTreeNode currentViewTreeNode;
-        while (!nodeInfos.empty()) {
-            currentNodeInfo = nodeInfos.pop();
-
-            // Have we just finished traversing all children?
-            if (currentNodeInfo == null) {
-                List<ViewTreeNode> children = new LinkedList<>();
-
-                // Collect children
-                currentViewTreeNode = viewTreeNodes.pop();
-                while (currentViewTreeNode != null) { // until we hit the parent
-                    children.add(currentViewTreeNode);
-                    currentViewTreeNode = viewTreeNodes.pop();
-                }
-
-                // Add children to parent, link parent to children
-                ViewTreeNode parent = viewTreeNodes.peek();
-                for (ViewTreeNode child : children) {
-                    child.parent = parent;
-                    parent.children.add(child);
-                }
-            }
-            else { // or did we just start processing a new node?
-                int childCount = currentNodeInfo.getChildCount();
-
-                // Process the current node (without children)
-                currentViewTreeNode = flatCopy(currentNodeInfo);
-
-                // Add node to stack
-                viewTreeNodes.add(currentViewTreeNode);
-
-                if (childCount > 0) {
-                    // Signal that this node has children
-                    nodeInfos.push(null);
-                    viewTreeNodes.push(null);
-                    for (int i = 0; i < childCount; ++i)
-                        nodeInfos.push(currentNodeInfo.getChild(i));
-                }
-            }
-        }
-
-        // Once the nodeInfo stack is empty, there should be exactly one element
-        // left on the ViewTreeNode stack.
-        return viewTreeNodes.pop();
-    }
-
-    /**
-     * Copies all required data from an AccessibilityNodeInfo into a newly
-     * created ViewTreeNode, omitting parents and children
-     * @param nodeInfo    AccessibilityNodeInfo to copy from
-     */
-    public static ViewTreeNode flatCopy(AccessibilityNodeInfo nodeInfo) {
-        ViewTreeNode result = new ViewTreeNode();
-        result.parent = null;
-        result.children = new ArrayList<>(nodeInfo.getChildCount());
-
-        result.contentDescription = charSeqToString(nodeInfo.getContentDescription());
-        result.className = charSeqToString(nodeInfo.getClassName());
-        result.inputType = nodeInfo.getInputType();
-        result.textSelectionStart = nodeInfo.getTextSelectionStart();
-        result.textSelectionEnd = nodeInfo.getTextSelectionEnd();
-        result.text = charSeqToString(nodeInfo.getText());
-        result.viewIDResourceName = nodeInfo.getViewIdResourceName();
-
-        if (Build.VERSION.SDK_INT >= 21)
-            result.actionList = new LinkedList<>(nodeInfo.getActionList());
-        else
-            result.actionList = new LinkedList<>();
-
-        result.checkable = nodeInfo.isCheckable();
-        result.checked = nodeInfo.isChecked();
-        result.clickable = nodeInfo.isClickable();
-        result.dismissable = nodeInfo.isDismissable();
-        result.editable = nodeInfo.isEditable();
-        result.enabled = nodeInfo.isEnabled();
-        result.focusable = nodeInfo.isFocusable();
-        result.focused = nodeInfo.isFocused();
-        result.longClickable = nodeInfo.isLongClickable();
-        result.multiLine = nodeInfo.isMultiLine();
-        result.password = nodeInfo.isPassword();
-        result.scrollable = nodeInfo.isScrollable();
-        result.selected = nodeInfo.isSelected();
-        result.visibleToUser = nodeInfo.isVisibleToUser();
-
-        return result;
-    }
-
     public static final Creator<ViewTreeNode> CREATOR = new Creator<ViewTreeNode>() {
         @Override
         public ViewTreeNode createFromParcel(Parcel in) {
@@ -124,10 +22,6 @@ public class ViewTreeNode implements Parcelable {
             return new ViewTreeNode[size];
         }
     };
-
-    private static String charSeqToString(CharSequence seq) {
-        return seq == null ? null : seq.toString();
-    }
 
     /**
      * Creates a ViewTreeNode from a parcel
@@ -161,10 +55,11 @@ public class ViewTreeNode implements Parcelable {
     }
 
     /**
-     * Creates an empty ViewTreeNode. Use flatCopy or fromAccessibilityNodeInfo
-     * instead.
+     * Creates an empty ViewTreeNode. This is supposed to be created from
+     * Coast Dove core only. Modules shall only receive and read these
+     * objects.
      */
-    private ViewTreeNode() {
+    public ViewTreeNode() {
     }
 
     /**
@@ -318,6 +213,102 @@ public class ViewTreeNode implements Parcelable {
         return visibleToUser;
     }
 
+    public void setParent(ViewTreeNode parent) {
+        this.parent = parent;
+    }
+
+    public void setChildren(ArrayList<ViewTreeNode> children) {
+        this.children = children;
+    }
+
+    public void setContentDescription(String contentDescription) {
+        this.contentDescription = contentDescription;
+    }
+
+    public void setClassName(String className) {
+        this.className = className;
+    }
+
+    public void setInputType(int inputType) {
+        this.inputType = inputType;
+    }
+
+    public void setTextSelectionStart(int textSelectionStart) {
+        this.textSelectionStart = textSelectionStart;
+    }
+
+    public void setTextSelectionEnd(int textSelectionEnd) {
+        this.textSelectionEnd = textSelectionEnd;
+    }
+
+    public void setText(String text) {
+        this.text = text;
+    }
+
+    public void setViewIDResourceName(String viewIDResourceName) {
+        this.viewIDResourceName = viewIDResourceName;
+    }
+
+    public void setActionList(List<AccessibilityNodeInfo.AccessibilityAction> actionList) {
+        this.actionList = actionList;
+    }
+
+    public void setCheckable(boolean checkable) {
+        this.checkable = checkable;
+    }
+
+    public void setChecked(boolean checked) {
+        this.checked = checked;
+    }
+
+    public void setClickable(boolean clickable) {
+        this.clickable = clickable;
+    }
+
+    public void setDismissable(boolean dismissable) {
+        this.dismissable = dismissable;
+    }
+
+    public void setEditable(boolean editable) {
+        this.editable = editable;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setFocusable(boolean focusable) {
+        this.focusable = focusable;
+    }
+
+    public void setFocused(boolean focused) {
+        this.focused = focused;
+    }
+
+    public void setLongClickable(boolean longClickable) {
+        this.longClickable = longClickable;
+    }
+
+    public void setMultiLine(boolean multiLine) {
+        this.multiLine = multiLine;
+    }
+
+    public void setPassword(boolean password) {
+        this.password = password;
+    }
+
+    public void setScrollable(boolean scrollable) {
+        this.scrollable = scrollable;
+    }
+
+    public void setSelected(boolean selected) {
+        this.selected = selected;
+    }
+
+    public void setVisibleToUser(boolean visibleToUser) {
+        this.visibleToUser = visibleToUser;
+    }
+
     @Override
     public int describeContents() {
         return 0;
@@ -347,5 +338,31 @@ public class ViewTreeNode implements Parcelable {
         dest.writeByte((byte) (scrollable ? 1 : 0));
         dest.writeByte((byte) (selected ? 1 : 0));
         dest.writeByte((byte) (visibleToUser ? 1 : 0));
+    }
+
+    @Override
+    public String toString() {
+        return toString(0);
+    }
+
+    public String toString(int indent) {
+        String result = toStringFlat(indent);
+        for (ViewTreeNode child : children)
+            result += "\n\n" + child.toString(indent + 2);
+        return result;
+    }
+
+    public String toStringFlat(int indent) {
+        String resID = viewIDResourceName == null ? "" : "ID: " + viewIDResourceName;
+        String txt = text == null ? "" : "Text: " + text;
+        String clss = className == null ? "" : "Class: " + className;
+        String resIDSep = resID.equals("") ? "" : ", ";
+        String txtSep = txt.equals("") ? "" : ", ";
+
+        String indentation = "";
+        for (int i = 0; i < indent; ++i)
+            indentation += " ";
+
+        return indentation + "(" + resID + resIDSep + txt + txtSep + clss + ")";
     }
 }

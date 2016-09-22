@@ -53,13 +53,13 @@ public abstract class CoastDoveListenerService extends Service {
     public static final int MSG_INTERACTION_DETECTED = 256;
     public static final int MSG_NOTIFICATION_DETECTED = 512;
     public static final int MSG_SCREEN_STATE_DETECTED = 1024;
-    public static final int MSG_VIEW_TREE_RECEIVED = 2048;
+    public static final int MSG_VIEW_TREE = 2048;
     public static final int MSG_ACTION_SUCCESSFUL = 4096;
 
     // Sent from Coast Dove Listener -> Coast Dove Core
     public static final int REPLY_REQUEST_META_INFORMATION = 1;
-    public static final int REPLY_REQUEST_FULL_VIEW_TREE = 2;
-    public static final int REPLY_REQUEST_PARTIAL_VIEW_TREE = 4;
+    public static final int REPLY_REQUEST_VIEW_TREE = 2;
+    public static final int REPLY_REQUEST_VIEW_TREE_NODE = 4;
     public static final int REPLY_REQUEST_ACTION = 8;
 
     public static final String DATA_APP_PACKAGE_NAME = "appPackageName";
@@ -71,7 +71,7 @@ public abstract class CoastDoveListenerService extends Service {
     public static final String DATA_NOTIFICATION = "notification";
     public static final String DATA_SCREEN_OFF = "screenOff";
     public static final String DATA_VIEW_TREE = "viewTree";
-    public static final String DATA_VIEW_TREE_ROOT_ID = "viewTreeRootID";
+    public static final String DATA_VIEW_TREE_START_NODE_RESOURCE = "viewTreeRootID";
     public static final String DATA_ACTION = "action";
 
     /**
@@ -138,7 +138,7 @@ public abstract class CoastDoveListenerService extends Service {
                 boolean screenOff = data.getBoolean(DATA_SCREEN_OFF);
                 screenStateDetected(screenOff);
             }
-            if ((msg.what & MSG_VIEW_TREE_RECEIVED) != 0) {
+            if ((msg.what & MSG_VIEW_TREE) != 0) {
                 ViewTreeNode viewTree = data.getParcelable(DATA_VIEW_TREE);
                 viewTreeReceived(viewTree);
             }
@@ -296,23 +296,23 @@ public abstract class CoastDoveListenerService extends Service {
     }
 
     /**
-     * Requests a view tree from Coast Dove core. This is a copy of the original
+     * Requests a view tree from Coast Dove core, which is a copy of the original
      * AccessibilityNodeInfo tree.
-     * @param subTreeRootResource    If this is null, the full view tree will be requested.
-     *                               Otherwise, the core will look for a NodeInfo whose
-     *                               viewIdResourceName contains subTreeRootResource, and if
-     *                               found, delivers the subtree with that element as its root.
-     *                               If not found, nothing is delivered.
+     * @param startNodeResource    If this is null, the root of the view tree will be requested.
+     *                             Otherwise, the core will look for a NodeInfo whose
+     *                             viewIdResourceName contains this parameter's string, and if
+     *                             found, delivers the subtree with that element as its root.
+     *                             If not found, nothing is delivered.
+     * @param includeSubTree       If true, the entire subtree is included; if false,
+     *                             only the node itself is delivered.
      */
-    protected final void requestViewTree(String subTreeRootResource) {
+    protected final void requestViewTree(String startNodeResource, boolean includeSubTree) {
         Bundle data = new Bundle();
         int type;
-        if (subTreeRootResource != null) {
-            data.putString(DATA_VIEW_TREE_ROOT_ID, subTreeRootResource);
-            type = REPLY_REQUEST_PARTIAL_VIEW_TREE;
-        }
-        else
-            type = REPLY_REQUEST_FULL_VIEW_TREE;
+        type = includeSubTree ? REPLY_REQUEST_VIEW_TREE : REPLY_REQUEST_VIEW_TREE_NODE;
+
+        if (startNodeResource != null)
+            data.putString(DATA_VIEW_TREE_START_NODE_RESOURCE, startNodeResource);
 
         Message msg = Message.obtain(null, type, 0, 0);
         msg.setData(data);
