@@ -1,27 +1,31 @@
 package simonlang.coastdove.lib;
 
+import android.graphics.Rect;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
+import java.util.Stack;
 
 /**
  * Container for data from an AccessibilityNodeInfo object
  */
 public class ViewTreeNode implements Parcelable {
-    public static final Creator<ViewTreeNode> CREATOR = new Creator<ViewTreeNode>() {
-        @Override
-        public ViewTreeNode createFromParcel(Parcel in) {
-            return new ViewTreeNode(in);
-        }
+    public interface Filter {
+        boolean filter(ViewTreeNode node);
+    }
 
-        @Override
-        public ViewTreeNode[] newArray(int size) {
-            return new ViewTreeNode[size];
-        }
-    };
+    /**
+     * Creates an empty ViewTreeNode. This is supposed to be created from
+     * Coast Dove core only. Modules shall only receive and read these
+     * objects.
+     */
+    public ViewTreeNode() {
+    }
 
     /**
      * Creates a ViewTreeNode from a parcel
@@ -35,6 +39,8 @@ public class ViewTreeNode implements Parcelable {
         textSelectionEnd = in.readInt();
         text = in.readString();
         viewIDResourceName = in.readString();
+        boundsInScreen = in.readParcelable(Rect.class.getClassLoader());
+        boundsInParent = in.readParcelable(Rect.class.getClassLoader());
         checkable = in.readByte() != 0;
         checked = in.readByte() != 0;
         clickable = in.readByte() != 0;
@@ -54,13 +60,17 @@ public class ViewTreeNode implements Parcelable {
             child.addParentReference(this);
     }
 
-    /**
-     * Creates an empty ViewTreeNode. This is supposed to be created from
-     * Coast Dove core only. Modules shall only receive and read these
-     * objects.
-     */
-    public ViewTreeNode() {
-    }
+    public static final Creator<ViewTreeNode> CREATOR = new Creator<ViewTreeNode>() {
+        @Override
+        public ViewTreeNode createFromParcel(Parcel in) {
+            return new ViewTreeNode(in);
+        }
+
+        @Override
+        public ViewTreeNode[] newArray(int size) {
+            return new ViewTreeNode[size];
+        }
+    };
 
     /**
      * Called internally when read from parcel, sets the reference to the parent.
@@ -85,6 +95,9 @@ public class ViewTreeNode implements Parcelable {
 
     private List<AccessibilityNodeInfo.AccessibilityAction> actionList;
 
+    private Rect boundsInScreen;
+    private Rect boundsInParent;
+
     private boolean checkable;
     private boolean checked;
     private boolean clickable;
@@ -99,6 +112,90 @@ public class ViewTreeNode implements Parcelable {
     private boolean scrollable;
     private boolean selected;
     private boolean visibleToUser;
+
+    /**
+     * Returns this node without any parent or children references
+     */
+    public ViewTreeNode getFlatNode() {
+        ViewTreeNode result = new ViewTreeNode();
+        result.parent = null;
+        result.children = new ArrayList<>();
+        result.contentDescription = contentDescription;
+        result.className = className;
+        result.inputType = inputType;
+        result.textSelectionStart = textSelectionStart;
+        result.textSelectionEnd = textSelectionEnd;
+        result.text = text;
+        result.viewIDResourceName = viewIDResourceName;
+
+        result.actionList = new LinkedList<>();
+        if (actionList != null)
+            result.actionList.addAll(actionList);
+        result.boundsInScreen = new Rect(boundsInScreen);
+        result.boundsInParent = new Rect(boundsInParent);
+
+        result.checkable = checkable;
+        result.checked = checked;
+        result.clickable = clickable;
+        result.dismissable = dismissable;
+        result.editable = editable;
+        result.enabled = enabled;
+        result.focusable = focusable;
+        result.focused = focused;
+        result.longClickable = longClickable;
+        result.multiLine = multiLine;
+        result.password = password;
+        result.scrollable = scrollable;
+        result.selected = selected;
+        result.visibleToUser = visibleToUser;
+        return result;
+    }
+
+    /**
+     * Returns the next node that yields true when checked by the provided filter,
+     * or null if no such node exists
+     * @param nodes     Current queue of nodes
+     * @param filter    Filter to apply to the nodes
+     */
+    private static ViewTreeNode findNext(Queue<ViewTreeNode> nodes, Filter filter) {
+        while (!nodes.isEmpty()) {
+            ViewTreeNode node = nodes.poll();
+            for (ViewTreeNode child : node.children)
+                nodes.add(child);
+            if (filter.filter(node))
+                return node;
+        }
+        return null;
+    }
+
+    /**
+     * Finds the first node that passes the provided filter
+     * @param filter    Filter that the node must pass
+     * @return First node in the tree that passes the filter, or null if
+     *         no such node exists
+     */
+    public ViewTreeNode findNode(Filter filter) {
+        Queue<ViewTreeNode> nodes = new LinkedList<>();
+        nodes.add(this);
+        return findNext(nodes, filter);
+    }
+
+    /**
+     * Finds all nodes that pass the provided filter
+     * @param filter    Filter that the nodes must pass
+     * @return All nodes in the tree that pass the filter (empty list if none)
+     */
+    public LinkedList<ViewTreeNode> findNodes(Filter filter) {
+        Queue<ViewTreeNode> nodes = new LinkedList<>();
+        nodes.add(this);
+        LinkedList<ViewTreeNode> result = new LinkedList<>();
+        ViewTreeNode next = findNext(nodes, filter);
+        while (next != null) {
+            result.add(next);
+            next = findNext(nodes, filter);
+        }
+        return result;
+    }
 
     public ViewTreeNode getParent() {
         return parent;
@@ -155,6 +252,14 @@ public class ViewTreeNode implements Parcelable {
 
     public List<AccessibilityNodeInfo.AccessibilityAction> getActionList() {
         return actionList;
+    }
+
+    public void getBoundsInScreen(Rect outBounds) {
+        outBounds.set(boundsInScreen);
+    }
+
+    public void getBoundsInParent(Rect outBounds) {
+        outBounds.set(boundsInParent);
     }
 
     public boolean isCheckable() {
@@ -253,6 +358,14 @@ public class ViewTreeNode implements Parcelable {
         this.actionList = actionList;
     }
 
+    public void setBoundsInScreen(Rect boundsInScreen) {
+        this.boundsInScreen = boundsInScreen;
+    }
+
+    public void setBoundsInParent(Rect boundsInParent) {
+        this.boundsInParent = boundsInParent;
+    }
+
     public void setCheckable(boolean checkable) {
         this.checkable = checkable;
     }
@@ -309,6 +422,47 @@ public class ViewTreeNode implements Parcelable {
         this.visibleToUser = visibleToUser;
     }
 
+    /**
+     * Converts this tree to a string, showing each node's
+     * viewIDResourceName, text, and class (only those not null).
+     * Children are indented by 2 more spaces than their parent
+     */
+    @Override
+    public String toString() {
+        return toString(0);
+    }
+
+    /**
+     * Converts this tree to a string
+     * @param indent    By how many spaces to indent the string
+     */
+    public String toString(int indent) {
+        String result = toStringFlat(indent);
+        for (ViewTreeNode child : children)
+            result += "\n\n" + child.toString(indent + 2);
+        return result;
+    }
+
+    /**
+     * Converts only this node (without parent or children) to
+     * a string, showing its viewIDResourceName, text, and class
+     * (only those not null).
+     * @param indent    By how many spaces to indent the string
+     */
+    public String toStringFlat(int indent) {
+        String resID = viewIDResourceName == null ? "" : "ID: " + viewIDResourceName;
+        String txt = text == null ? "" : "Text: " + text;
+        String clss = className == null ? "" : "Class: " + className;
+        String resIDSep = resID.equals("") ? "" : ", ";
+        String txtSep = txt.equals("") ? "" : ", ";
+
+        String indentation = "";
+        for (int i = 0; i < indent; ++i)
+            indentation += " ";
+
+        return indentation + "(" + resID + resIDSep + txt + txtSep + clss + ")";
+    }
+
     @Override
     public int describeContents() {
         return 0;
@@ -324,6 +478,8 @@ public class ViewTreeNode implements Parcelable {
         dest.writeInt(textSelectionEnd);
         dest.writeString(text);
         dest.writeString(viewIDResourceName);
+        dest.writeParcelable(boundsInScreen, flags);
+        dest.writeParcelable(boundsInParent, flags);
         dest.writeByte((byte) (checkable ? 1 : 0));
         dest.writeByte((byte) (checked ? 1 : 0));
         dest.writeByte((byte) (clickable ? 1 : 0));
@@ -338,31 +494,5 @@ public class ViewTreeNode implements Parcelable {
         dest.writeByte((byte) (scrollable ? 1 : 0));
         dest.writeByte((byte) (selected ? 1 : 0));
         dest.writeByte((byte) (visibleToUser ? 1 : 0));
-    }
-
-    @Override
-    public String toString() {
-        return toString(0);
-    }
-
-    public String toString(int indent) {
-        String result = toStringFlat(indent);
-        for (ViewTreeNode child : children)
-            result += "\n\n" + child.toString(indent + 2);
-        return result;
-    }
-
-    public String toStringFlat(int indent) {
-        String resID = viewIDResourceName == null ? "" : "ID: " + viewIDResourceName;
-        String txt = text == null ? "" : "Text: " + text;
-        String clss = className == null ? "" : "Class: " + className;
-        String resIDSep = resID.equals("") ? "" : ", ";
-        String txtSep = txt.equals("") ? "" : ", ";
-
-        String indentation = "";
-        for (int i = 0; i < indent; ++i)
-            indentation += " ";
-
-        return indentation + "(" + resID + resIDSep + txt + txtSep + clss + ")";
     }
 }

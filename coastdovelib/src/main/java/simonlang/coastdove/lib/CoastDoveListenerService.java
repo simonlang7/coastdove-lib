@@ -71,7 +71,9 @@ public abstract class CoastDoveListenerService extends Service {
     public static final String DATA_NOTIFICATION = "notification";
     public static final String DATA_SCREEN_OFF = "screenOff";
     public static final String DATA_VIEW_TREE = "viewTree";
-    public static final String DATA_VIEW_TREE_START_NODE_RESOURCE = "viewTreeRootID";
+    public static final String DATA_VIEW_TREE_NODE = "viewTreeNode";
+    public static final String DATA_VIEW_TREE_START_NODE_RESOURCE = "viewTreeStartNodeResource";
+    public static final String DATA_RESOURCE_ID = "resourceID";
     public static final String DATA_ACTION = "action";
 
     /**
@@ -300,7 +302,7 @@ public abstract class CoastDoveListenerService extends Service {
      * AccessibilityNodeInfo tree.
      * @param startNodeResource    If this is null, the root of the view tree will be requested.
      *                             Otherwise, the core will look for a NodeInfo whose
-     *                             viewIdResourceName contains this parameter's string, and if
+     *                             viewIdResourceName ends with this parameter's string, and if
      *                             found, delivers the subtree with that element as its root.
      *                             If not found, nothing is delivered.
      * @param includeSubTree       If true, the entire subtree is included; if false,
@@ -326,23 +328,58 @@ public abstract class CoastDoveListenerService extends Service {
     /**
      * Requests the Coast Dove core to perform an action on a node (an element).
      * This only works on SDK versions >= 21
-     * @param action    Action to perform
+     * @param resourceID    Android ID, or ViewIDResourceName, of the element to
+     *                      perform the action on
+     * @param action        Action to perform
+     * @return True if the action was requested, false if not (only works on SDK level >= 21)
      */
-    protected final void requestAction(AccessibilityNodeInfo.AccessibilityAction action) {
+    protected final boolean requestAction(String resourceID,
+            AccessibilityNodeInfo.AccessibilityAction action) {
         if (Build.VERSION.SDK_INT < 21)
-            return;
+            return false;
 
         Bundle data = new Bundle();
         data.putInt(DATA_ACTION, action.getId());
+        data.putString(DATA_RESOURCE_ID, resourceID);
         int type = REPLY_REQUEST_ACTION;
 
         Message msg = Message.obtain(null, type, 0, 0);
         msg.setData(data);
         try {
             mReplyMessenger.send(msg);
+            return true;
         } catch (RemoteException e) {
             Log.e("Listener", "Unable to send reply (requestAction): " + e.getMessage());
         }
+        return false;
+    }
+
+    /**
+     * Requests the Coast Dove core to perform an action on a node (an element).
+     * This only works on SDK versions >= 21
+     * @param node      Node to perform the action on
+     * @param action    Action to perform
+     * @return True if the action was requested, false if not (only works on SDK level >= 21)
+     */
+    protected final boolean requestAction(ViewTreeNode node,
+                                          AccessibilityNodeInfo.AccessibilityAction action) {
+        if (Build.VERSION.SDK_INT < 21)
+            return false;
+
+        Bundle data = new Bundle();
+        data.putInt(DATA_ACTION, action.getId());
+        data.putParcelable(DATA_VIEW_TREE_NODE, node.getFlatNode());
+        int type = REPLY_REQUEST_ACTION;
+
+        Message msg = Message.obtain(null, type, 0, 0);
+        msg.setData(data);
+        try {
+            mReplyMessenger.send(msg);
+            return true;
+        } catch (RemoteException e) {
+            Log.e("Listener", "Unable to send reply (requestAction): " + e.getMessage());
+        }
+        return false;
     }
 
     /**
