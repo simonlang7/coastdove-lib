@@ -55,6 +55,7 @@ public abstract class CoastDoveListenerService extends Service {
     public static final int MSG_SCREEN_STATE_DETECTED = 1024;
     public static final int MSG_VIEW_TREE = 2048;
     public static final int MSG_ACTION_RESULT = 4096;
+    public static final int MSG_SCROLL_POSITION_DETECTED = 8192;
 
     // Sent from Coast Dove Listener -> Coast Dove Core
     public static final int REPLY_REQUEST_META_INFORMATION = 1;
@@ -75,6 +76,7 @@ public abstract class CoastDoveListenerService extends Service {
     public static final String DATA_VIEW_TREE_START_NODE_RESOURCE = "viewTreeStartNodeResource";
     public static final String DATA_RESOURCE_ID = "resourceID";
     public static final String DATA_ACTION = "action";
+    public static final String DATA_SCROLL_POSITION = "scrollPosition";
 
     /**
      * Handler for incoming messages from Coast Dove core
@@ -157,6 +159,10 @@ public abstract class CoastDoveListenerService extends Service {
                         actionFailed(node, action);
                 }
             }
+            if ((msg.what & MSG_SCROLL_POSITION_DETECTED) != 0) {
+                ScrollPosition scrollPosition = data.getParcelable(DATA_SCROLL_POSITION);
+                scrollPositionDetected(scrollPosition);
+            }
         }
     }
 
@@ -183,6 +189,8 @@ public abstract class CoastDoveListenerService extends Service {
     private transient volatile Set<String> enabledApps;
     /** Last viewtree received, if ever requested using requestViewTree */
     private transient volatile ViewTreeNode lastViewTree;
+    /** Last scroll position detected */
+    private transient volatile ScrollPosition lastScrollPosition;
 
     /**
      * Binds the service and initializes all members (except lastViewTree, which is set to null)
@@ -199,6 +207,7 @@ public abstract class CoastDoveListenerService extends Service {
         this.screenOff = false;
         this.enabledApps = new TreeSet<>(new CollatorWrapper());
         this.lastViewTree = null;
+        this.lastScrollPosition = null;
 
         onServiceBound();
         return mMessenger.getBinder();
@@ -289,12 +298,18 @@ public abstract class CoastDoveListenerService extends Service {
         onActionFailed(node, action);
     }
 
+    /** Internal wrapper for onScrollPositionDetected */
+    private void scrollPositionDetected(ScrollPosition scrollPosition) {
+        this.lastScrollPosition = scrollPosition;
+        onScrollPositionDetected(scrollPosition);
+    }
+
     /**
      * Requests AppMetaInformation from Coast Dove core. Will be delivered using
      * onMetaInformationDelivered
      * @param appPackageName    App to request meta information for
      */
-    protected final void requestMetaInformation(String appPackageName) {
+    public final void requestMetaInformation(String appPackageName) {
         Bundle data = new Bundle();
         data.putString(DATA_APP_PACKAGE_NAME, appPackageName);
         int type = REPLY_REQUEST_META_INFORMATION;
@@ -319,7 +334,7 @@ public abstract class CoastDoveListenerService extends Service {
      * @param includeSubTree       If true, the entire subtree is included; if false,
      *                             only the node itself is delivered.
      */
-    protected final void requestViewTree(String startNodeResource, boolean includeSubTree) {
+    public final void requestViewTree(String startNodeResource, boolean includeSubTree) {
         Bundle data = new Bundle();
         int type;
         type = includeSubTree ? REPLY_REQUEST_VIEW_TREE : REPLY_REQUEST_VIEW_TREE_NODE;
@@ -344,7 +359,7 @@ public abstract class CoastDoveListenerService extends Service {
      * @param action        Action to perform
      * @return True if the action was requested, false if not (only works on SDK level >= 21)
      */
-    protected final boolean requestAction(String resourceID,
+    public final boolean requestAction(String resourceID,
             AccessibilityNodeInfo.AccessibilityAction action) {
         if (Build.VERSION.SDK_INT < 21)
             return false;
@@ -372,7 +387,7 @@ public abstract class CoastDoveListenerService extends Service {
      * @param action    Action to perform
      * @return True if the action was requested, false if not (only works on SDK level >= 21)
      */
-    protected final boolean requestAction(ViewTreeNode node,
+    public final boolean requestAction(ViewTreeNode node,
                                           AccessibilityNodeInfo.AccessibilityAction action) {
         if (Build.VERSION.SDK_INT < 21)
             return false;
@@ -396,24 +411,24 @@ public abstract class CoastDoveListenerService extends Service {
     /**
      * Called by the library when the service is bound, can be used for initialization
      */
-    protected abstract void onServiceBound();
+    protected void onServiceBound() { }
 
     /**
      * Called by the library when the service is unbound, can be used for cleaning up
      */
-    protected abstract void onServiceUnbound();
+    protected void onServiceUnbound() { }
 
     /**
      * Called by the library when the core enables an app for this module
      * @param appPackageName    App enabled by the core
      */
-    protected abstract void onAppEnabled(String appPackageName);
+    protected void onAppEnabled(String appPackageName) { }
 
     /**
      * Called by the library when the core disables an app for this module
      * @param appPackageName    App disabled by the core
      */
-    protected abstract void onAppDisabled(String appPackageName);
+    protected void onAppDisabled(String appPackageName) { }
 
     /**
      * Called by the library when AppMetaInformation is delivered. Request it by calling
@@ -421,59 +436,59 @@ public abstract class CoastDoveListenerService extends Service {
      * @param appPackageName     App to which the meta information belongs
      * @param metaInformation    Meta information delivered
      */
-    protected abstract void onMetaInformationDelivered(String appPackageName, AppMetaInformation metaInformation);
+    protected void onMetaInformationDelivered(String appPackageName, AppMetaInformation metaInformation) { }
 
     /**
      * Called by the library when any associated app is put in the foreground
      * (i.e., when any activity of an associated app is shown when another app
      * was in foreground before)
      */
-    protected abstract void onAppOpened();
+    protected void onAppOpened() { }
 
     /**
      * Called by the library when any associated app is put in the background
      * (i.e., no activity of an associated app is shown anymore when before it
      * was)
      */
-    protected abstract void onAppClosed();
+    protected void onAppClosed() { }
 
     /**
      * Called by the library whenever a new activity has been detected
      * @param activity    The activity detected
      */
-    protected abstract void onActivityDetected(String activity);
+    protected void onActivityDetected(String activity) { }
 
     /**
      * Called by the library whenever a new set of layouts has been detected
      * @param layouts    Layouts detected
      */
-    protected abstract void onLayoutsDetected(Set<String> layouts);
+    protected void onLayoutsDetected(Set<String> layouts) { }
 
     /**
      * Called by the library whenever a new interaction has been detected
      * @param interaction    Interaction detected
      * @param eventType      Type of event
      */
-    protected abstract void onInteractionDetected(Collection<InteractionEventData> interaction, EventType eventType);
+    protected void onInteractionDetected(Collection<InteractionEventData> interaction, EventType eventType) { }
 
     /**
      * Called by the library whenever a new notification has been detected
      * @param notification    Notification detected
      */
-    protected abstract void onNotificationDetected(String notification);
+    protected void onNotificationDetected(String notification) { }
 
     /**
      * Called by the library whenever the screen state has changed (turned off or on)
      * @param screenOff    Whether the screen has been turned off or on (true if off)
      */
-    protected abstract void onScreenStateDetected(boolean screenOff);
+    protected void onScreenStateDetected(boolean screenOff) { }
 
     /**
      * Called by the library when a view tree has been received. Use requestViewTree
      * to request one.
      * @param viewTree    ViewTree received
      */
-    protected abstract void onViewTreeReceived(ViewTreeNode viewTree);
+    protected void onViewTreeReceived(ViewTreeNode viewTree) { }
 
     /**
      * Called by the library when an action previously requested has been executed
@@ -481,7 +496,7 @@ public abstract class CoastDoveListenerService extends Service {
      * @param node      (Flat) node on which the action was executed
      * @param action    Action executed successfully
      */
-    protected abstract void onActionSuccessful(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action);
+    protected void onActionSuccessful(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action) { }
 
     /**
      * Called by the library when an action previously requested could not be
@@ -489,7 +504,14 @@ public abstract class CoastDoveListenerService extends Service {
      * @param node      (Flat) node on which the action was supposed to be executed
      * @param action    Action that failed
      */
-    protected abstract void onActionFailed(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action);
+    protected void onActionFailed(ViewTreeNode node, AccessibilityNodeInfo.AccessibilityAction action) { }
+
+    /**
+     * Called by the library when a scroll position has been detected
+     * @param scrollPosition    Scroll position detected
+     */
+    protected void onScrollPositionDetected(ScrollPosition scrollPosition) { }
+
 
 
     /** Last package name detected, or "" if none so far */
@@ -528,4 +550,8 @@ public abstract class CoastDoveListenerService extends Service {
         return lastViewTree;
     }
 
+    /** Last scroll position detected */
+    public ScrollPosition getLastScrollPosition() {
+        return lastScrollPosition;
+    }
 }

@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.Stack;
 
 /**
  * Container for data from an AccessibilityNodeInfo object
@@ -17,6 +16,85 @@ import java.util.Stack;
 public class ViewTreeNode implements Parcelable {
     public interface Filter {
         boolean filter(ViewTreeNode node);
+    }
+
+    /**
+     * RangeInfo class, maps to the values of AccessibilityNodeInfo.RangeInfo
+     */
+    public static class RangeInfo implements Parcelable {
+        /** integer range */
+        public static final int RANGE_TYPE_INT = 0;
+        /** float range */
+        public static final int RANGE_TYPE_FLOAT = 1;
+        /** percentage range, values from 0 to 1 */
+        public static final int RANGE_TYPE_PERCENT = 2;
+
+        private int mType;
+        private float mMin;
+        private float mMax;
+        private float mCurrent;
+
+        public RangeInfo(RangeInfo copyFrom) {
+            mType = copyFrom.mType;
+            mMin = copyFrom.mMin;
+            mMax = copyFrom.mMax;
+            mCurrent = copyFrom.mCurrent;
+        }
+
+        public RangeInfo(AccessibilityNodeInfo.RangeInfo copyFrom) {
+            mType = copyFrom.getType();
+            mMin = copyFrom.getMin();
+            mMax = copyFrom.getMax();
+            mCurrent = copyFrom.getCurrent();
+        }
+
+        protected RangeInfo(Parcel in) {
+            mType = in.readInt();
+            mMin = in.readFloat();
+            mMax = in.readFloat();
+            mCurrent = in.readFloat();
+        }
+
+        public static final Creator<RangeInfo> CREATOR = new Creator<RangeInfo>() {
+            @Override
+            public RangeInfo createFromParcel(Parcel in) {
+                return new RangeInfo(in);
+            }
+
+            @Override
+            public RangeInfo[] newArray(int size) {
+                return new RangeInfo[size];
+            }
+        };
+
+        public int getType() {
+            return mType;
+        }
+
+        public float getMin() {
+            return mMin;
+        }
+
+        public float getMax() {
+            return mMax;
+        }
+
+        public float getCurrent() {
+            return mCurrent;
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(mType);
+            dest.writeFloat(mMin);
+            dest.writeFloat(mMax);
+            dest.writeFloat(mCurrent);
+        }
     }
 
     /**
@@ -41,6 +119,7 @@ public class ViewTreeNode implements Parcelable {
         viewIDResourceName = in.readString();
         boundsInScreen = in.readParcelable(Rect.class.getClassLoader());
         boundsInParent = in.readParcelable(Rect.class.getClassLoader());
+        rangeInfo = in.readParcelable(RangeInfo.class.getClassLoader());
         checkable = in.readByte() != 0;
         checked = in.readByte() != 0;
         clickable = in.readByte() != 0;
@@ -98,6 +177,8 @@ public class ViewTreeNode implements Parcelable {
     private Rect boundsInScreen;
     private Rect boundsInParent;
 
+    private RangeInfo rangeInfo;
+
     private boolean checkable;
     private boolean checked;
     private boolean clickable;
@@ -134,6 +215,8 @@ public class ViewTreeNode implements Parcelable {
         result.boundsInScreen = new Rect(boundsInScreen);
         result.boundsInParent = new Rect(boundsInParent);
 
+        result.rangeInfo = rangeInfo == null ? null : new RangeInfo(rangeInfo);
+
         result.checkable = checkable;
         result.checked = checked;
         result.clickable = clickable;
@@ -166,6 +249,17 @@ public class ViewTreeNode implements Parcelable {
                 return node;
         }
         return null;
+    }
+
+    /**
+     * Indicates whether this tree has a node that passes the given filter
+     * @param filter    Filter that the node must pass
+     * @return True if such a node exists, false if not
+     */
+    public boolean hasNode(Filter filter) {
+        Queue<ViewTreeNode> nodes = new LinkedList<>();
+        nodes.add(this);
+        return findNext(nodes, filter) != null;
     }
 
     /**
@@ -245,9 +339,19 @@ public class ViewTreeNode implements Parcelable {
         return text;
     }
 
+    /** Returns the text, or "" if the text is null */
+    public String text() {
+        return text != null ? text : "";
+    }
+
     /** Also called Android ID (android:id) or Resource ID */
     public String getViewIDResourceName() {
         return viewIDResourceName;
+    }
+
+    /** Returns the resource ID, or "" if the resource ID is null */
+    public String viewIDResourceName() {
+        return viewIDResourceName != null ? viewIDResourceName : "";
     }
 
     public List<AccessibilityNodeInfo.AccessibilityAction> getActionList() {
@@ -260,6 +364,10 @@ public class ViewTreeNode implements Parcelable {
 
     public void getBoundsInParent(Rect outBounds) {
         outBounds.set(boundsInParent);
+    }
+
+    public RangeInfo getRangeInfo() {
+        return rangeInfo;
     }
 
     public boolean isCheckable() {
@@ -364,6 +472,10 @@ public class ViewTreeNode implements Parcelable {
 
     public void setBoundsInParent(Rect boundsInParent) {
         this.boundsInParent = boundsInParent;
+    }
+
+    public void setRangeInfo(RangeInfo rangeInfo) {
+        this.rangeInfo = rangeInfo;
     }
 
     public void setCheckable(boolean checkable) {
@@ -480,6 +592,7 @@ public class ViewTreeNode implements Parcelable {
         dest.writeString(viewIDResourceName);
         dest.writeParcelable(boundsInScreen, flags);
         dest.writeParcelable(boundsInParent, flags);
+        dest.writeParcelable(rangeInfo, flags);
         dest.writeByte((byte) (checkable ? 1 : 0));
         dest.writeByte((byte) (checked ? 1 : 0));
         dest.writeByte((byte) (clickable ? 1 : 0));
