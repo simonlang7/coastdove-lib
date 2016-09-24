@@ -76,6 +76,7 @@ public abstract class CoastDoveListenerService extends Service {
     public static final String DATA_VIEW_TREE_START_NODE_RESOURCE = "viewTreeStartNodeResource";
     public static final String DATA_RESOURCE_ID = "resourceID";
     public static final String DATA_ACTION = "action";
+    public static final String DATA_ACTION_ARGUMENTS = "actionArguments";
     public static final String DATA_SCROLL_POSITION = "scrollPosition";
 
     /**
@@ -357,16 +358,65 @@ public abstract class CoastDoveListenerService extends Service {
      * @param resourceID    Android ID, or ViewIDResourceName, of the element to
      *                      perform the action on
      * @param action        Action to perform
+     * @param arguments     Arguments for the action (can be null)
      * @return True if the action was requested, false if not (only works on SDK level >= 21)
      */
     public final boolean requestAction(String resourceID,
-            AccessibilityNodeInfo.AccessibilityAction action) {
+            AccessibilityNodeInfo.AccessibilityAction action,
+            Bundle arguments) {
         if (Build.VERSION.SDK_INT < 21)
             return false;
 
         Bundle data = new Bundle();
         data.putInt(DATA_ACTION, action.getId());
         data.putString(DATA_RESOURCE_ID, resourceID);
+        if (arguments != null)
+            data.putBundle(DATA_ACTION_ARGUMENTS, arguments);
+        int type = REPLY_REQUEST_ACTION;
+
+        Message msg = Message.obtain(null, type, 0, 0);
+        msg.setData(data);
+        try {
+            mReplyMessenger.send(msg);
+            return true;
+        } catch (RemoteException e) {
+            Log.e("Listener", "Unable to send reply (requestAction): " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Requests the Coast Dove core to perform an action on a node (an element).
+     * This only works on SDK versions >= 21
+     * @param resourceID    Android ID, or ViewIDResourceName, of the element to
+     *                      perform the action on
+     * @param action        Action to perform
+     * @return True if the action was requested, false if not (only works on SDK level >= 21)
+     */
+    public final boolean requestAction(String resourceID,
+                                       AccessibilityNodeInfo.AccessibilityAction action) {
+        return requestAction(resourceID, action, null);
+    }
+
+    /**
+     * Requests the Coast Dove core to perform an action on a node (an element).
+     * This only works on SDK versions >= 21
+     * @param node          Node to perform the action on
+     * @param action        Action to perform
+     * @param arguments     Arguments for the action (can be null)
+     * @return True if the action was requested, false if not (only works on SDK level >= 21)
+     */
+    public final boolean requestAction(ViewTreeNode node,
+                                       AccessibilityNodeInfo.AccessibilityAction action,
+                                       Bundle arguments) {
+        if (Build.VERSION.SDK_INT < 21)
+            return false;
+
+        Bundle data = new Bundle();
+        data.putInt(DATA_ACTION, action.getId());
+        data.putParcelable(DATA_VIEW_TREE_NODE, node.getFlatNode());
+        if (arguments != null)
+            data.putBundle(DATA_ACTION_ARGUMENTS, arguments);
         int type = REPLY_REQUEST_ACTION;
 
         Message msg = Message.obtain(null, type, 0, 0);
@@ -388,24 +438,8 @@ public abstract class CoastDoveListenerService extends Service {
      * @return True if the action was requested, false if not (only works on SDK level >= 21)
      */
     public final boolean requestAction(ViewTreeNode node,
-                                          AccessibilityNodeInfo.AccessibilityAction action) {
-        if (Build.VERSION.SDK_INT < 21)
-            return false;
-
-        Bundle data = new Bundle();
-        data.putInt(DATA_ACTION, action.getId());
-        data.putParcelable(DATA_VIEW_TREE_NODE, node.getFlatNode());
-        int type = REPLY_REQUEST_ACTION;
-
-        Message msg = Message.obtain(null, type, 0, 0);
-        msg.setData(data);
-        try {
-            mReplyMessenger.send(msg);
-            return true;
-        } catch (RemoteException e) {
-            Log.e("Listener", "Unable to send reply (requestAction): " + e.getMessage());
-        }
-        return false;
+                                       AccessibilityNodeInfo.AccessibilityAction action) {
+        return requestAction(node, action, null);
     }
 
     /**
