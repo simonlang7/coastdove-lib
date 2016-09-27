@@ -75,6 +75,12 @@ public class ScrollPosition implements Parcelable {
     }
 
     @Override
+    public String toString() {
+        return "Showing items from " + fromIndex + " to " + toIndex
+                + " of " + itemCount;
+    }
+
+    @Override
     public int describeContents() {
         return 0;
     }

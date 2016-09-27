@@ -26,6 +26,7 @@ public enum EventType {
     CLICK,
     LONG_CLICK,
     SCROLLING,
+    SCROLL_POSITION,
     SCREEN_OFF,
     OTHER;
 
