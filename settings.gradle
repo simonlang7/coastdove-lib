@@ -1,1 +1,1 @@
-include ':app', ':coastdovelib'
+include ':coastdovelib'
