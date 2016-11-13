@@ -585,7 +585,7 @@ public abstract class CoastDoveListenerService extends Service {
     }
 
     /** Last scroll position detected */
-    public ScrollPosition getLastScrollPosition() {
+    public final ScrollPosition getLastScrollPosition() {
         return lastScrollPosition;
     }
 }

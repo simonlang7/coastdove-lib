@@ -18,9 +18,14 @@
 
 package simonlang.coastdove.lib;
 
+import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 
 import java.util.ArrayList;
 
@@ -79,6 +84,24 @@ public abstract class CoastDoveModules {
         for (String app : associatedApps)
             associatedAppsArrayList.add(app);
         registerModule(context, serviceClass, moduleName, associatedAppsArrayList);
+    }
+
+
+    /**
+     * Checks whether the app (to which the source activity belongs) has permissions to draw
+     * overlays, and requests them if it doesn't
+     * @param source         Activity from which the request is sent
+     * @param requestCode    Request code (any number that is unique among concurrent requests)
+     */
+    @TargetApi(23)
+    public void checkOverlayPermissions(Activity source, int requestCode) {
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (!Settings.canDrawOverlays(source)) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + source.getPackageName()));
+                source.startActivityForResult(intent, requestCode);
+            }
+        }
     }
 }
 
